@@ -1,0 +1,6 @@
+{
+  "name": "Singapore Private Property Prices",
+  "description": "Singapore private residential property price tracker and market analytics terminal with API placeholders for backend integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
