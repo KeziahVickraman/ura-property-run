@@ -1,23 +1,18 @@
 import React, { useState } from 'react';
 import { 
   MapPin, 
-  Building2, 
-  Terminal, 
-  ExternalLink, 
-  TrendingUp, 
-  Coins, 
-  Database,
   ArrowRight,
-  Filter
+  TrendingUp,
+  Building,
+  Coins
 } from 'lucide-react';
 import { DistrictSummary, SingaporeRegion } from '../types/property';
 import { SINGAPORE_DISTRICTS, REGION_METADATA } from '../data/singaporeDistricts';
 
 interface DistrictExplorerProps {
-  districtSummaries: DistrictSummary[] | null;
+  districtSummaries: DistrictSummary[];
   selectedRegion: 'ALL' | SingaporeRegion;
   onSelectDistrict: (districtCode: string) => void;
-  onOpenApiModal: () => void;
   unitMeasurement: 'PSF' | 'PSM';
 }
 
@@ -25,7 +20,6 @@ export const DistrictExplorer: React.FC<DistrictExplorerProps> = ({
   districtSummaries,
   selectedRegion,
   onSelectDistrict,
-  onOpenApiModal,
   unitMeasurement,
 }) => {
   const [regionFilter, setRegionFilter] = useState<'ALL' | SingaporeRegion>(selectedRegion);
@@ -35,7 +29,7 @@ export const DistrictExplorer: React.FC<DistrictExplorerProps> = ({
     return d.region === regionFilter;
   });
 
-  // Map backend summaries if available
+  // Map summaries by district code
   const summaryMap = React.useMemo(() => {
     const map = new Map<string, DistrictSummary>();
     if (districtSummaries) {
@@ -52,7 +46,13 @@ export const DistrictExplorer: React.FC<DistrictExplorerProps> = ({
     return `S$ ${finalVal.toLocaleString('en-SG')}`;
   };
 
-  const isAwaitingFeed = !districtSummaries || districtSummaries.length === 0;
+  const formatPriceSgd = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return null;
+    if (val >= 1000000) {
+      return `S$ ${(val / 1000000).toFixed(2)}M`;
+    }
+    return `S$ ${val.toLocaleString('en-SG')}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -69,7 +69,7 @@ export const DistrictExplorer: React.FC<DistrictExplorerProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-            Singapore private residential properties are categorized into 28 postal districts across 3 official market segments: Core Central Region (CCR), Rest of Central Region (RCR), and Outside Central Region (OCR).
+            Aggregated statistics derived directly from the loaded URA PMI_Resi_Transaction records across Core Central (CCR), Rest of Central (RCR), and Outside Central (OCR).
           </p>
         </div>
 
@@ -81,7 +81,7 @@ export const DistrictExplorer: React.FC<DistrictExplorerProps> = ({
               onClick={() => setRegionFilter(r)}
               className={`px-3 py-1.5 rounded-md font-medium transition-all ${
                 regionFilter === r
-                  ? 'bg-rose-500 text-white shadow-xs'
+                  ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
@@ -91,106 +91,100 @@ export const DistrictExplorer: React.FC<DistrictExplorerProps> = ({
         </div>
       </div>
 
-      {/* API Placeholder Note */}
-      {isAwaitingFeed && (
-        <div className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-3.5 flex items-center justify-between flex-wrap gap-3 text-xs text-slate-300">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
-            <span>
-              District benchmark metrics awaiting backend API: <code className="font-mono text-amber-300">GET /api/v1/properties/districts</code>
-            </span>
-          </div>
-          <button
-            onClick={onOpenApiModal}
-            className="text-[11px] font-mono text-amber-400 hover:underline flex items-center gap-1"
-          >
-            <span>View District Schema</span>
-            <Terminal className="w-3 h-3" />
-          </button>
-        </div>
-      )}
-
-      {/* Grid of 28 Districts */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* District Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredDistricts.map((d) => {
           const summary = summaryMap.get(d.district);
-          const meta = REGION_METADATA[d.region];
+          const regionMeta = REGION_METADATA[d.region] || {
+            badgeClass: 'bg-slate-800 text-slate-300 border-slate-700',
+          };
+          const hasTransactions = summary && (summary.transactionCount ?? 0) > 0;
 
           return (
             <div
               key={d.district}
               id={`district-card-${d.district}`}
-              className="group bg-slate-900/60 hover:bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl p-4 transition-all flex flex-col justify-between"
+              className="bg-slate-900/80 border border-slate-800 hover:border-slate-700 rounded-xl p-4 flex flex-col justify-between transition-all group"
             >
               <div>
-                {/* District Code & Region Tag */}
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-extrabold text-white font-mono group-hover:text-rose-400 transition-colors">
-                      {d.district}
-                    </span>
-                    <span
-                      className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${meta.badgeClass}`}
-                    >
-                      {d.region}
-                    </span>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-bold font-mono text-white group-hover:text-rose-400 transition-colors">
+                        {d.district}
+                      </span>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${regionMeta.badgeClass}`}>
+                        {d.region}
+                      </span>
+                    </div>
+                    <h3 className="text-xs font-semibold text-slate-200 mt-0.5 line-clamp-1">
+                      {d.name}
+                    </h3>
                   </div>
 
-                  {/* Postal Sectors */}
-                  <span className="text-[10px] font-mono text-slate-400" title="Postal sector prefixes">
-                    Sector: {d.postalSectors.slice(0, 3).join(', ')}{d.postalSectors.length > 3 ? '...' : ''}
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-950 border border-slate-800 text-slate-400 shrink-0">
+                    {hasTransactions ? `${summary.transactionCount} lodged` : '0 lodged'}
                   </span>
                 </div>
 
-                {/* District Name & Description */}
-                <h3 className="text-xs font-bold text-slate-200 line-clamp-1 mb-1" title={d.name}>
-                  {d.name}
-                </h3>
-                <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed mb-3">
+                <p className="text-[11px] text-slate-400 line-clamp-2 mb-3 leading-relaxed">
                   {d.description}
                 </p>
-              </div>
 
-              {/* District Price Metrics Placeholder */}
-              <div className="pt-3 border-t border-slate-800/80">
-                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                {/* Metrics Breakdown from Endpoint */}
+                <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 mb-3">
                   <div>
                     <span className="text-[10px] text-slate-400 block">Avg {unitMeasurement}</span>
-                    {summary?.averagePsf ? (
-                      <span className="font-mono font-bold text-rose-300">
-                        {formatUnitPrice(summary.averagePsf)}
-                      </span>
-                    ) : (
-                      <span className="font-mono text-slate-400 text-xs flex items-center gap-1">
-                        -- <span className="text-[9px] text-amber-500/70 font-mono">awaiting</span>
-                      </span>
-                    )}
+                    <span className="text-xs font-bold font-mono text-slate-200">
+                      {hasTransactions && summary.averagePsf ? (
+                        formatUnitPrice(summary.averagePsf)
+                      ) : (
+                        <span className="text-slate-400">In other batches</span>
+                      )}
+                    </span>
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Tx Volume</span>
-                    {summary?.transactionCount ? (
-                      <span className="font-mono font-bold text-slate-200">
-                        {summary.transactionCount.toLocaleString()}
-                      </span>
-                    ) : (
-                      <span className="font-mono text-slate-400 text-xs flex items-center gap-1">
-                        -- <span className="text-[9px] text-amber-500/70 font-mono">awaiting</span>
-                      </span>
-                    )}
+                    <span className="text-[10px] text-slate-400 block">Median Price</span>
+                    <span className="text-xs font-bold font-mono text-slate-200">
+                      {hasTransactions && summary.medianPriceSgd ? (
+                        formatPriceSgd(summary.medianPriceSgd)
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </span>
                   </div>
                 </div>
 
-                {/* Filter Main Feed with this District */}
-                <button
-                  type="button"
-                  onClick={() => onSelectDistrict(d.district)}
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors"
-                >
-                  <span>View {d.district} Transactions</span>
-                  <ArrowRight className="w-3 h-3 text-rose-400" />
-                </button>
+                {/* Top Projects */}
+                {hasTransactions && summary.topProjects && summary.topProjects.length > 0 && (
+                  <div className="mb-3 text-[11px]">
+                    <span className="text-slate-400 text-[10px] block mb-1 font-mono">
+                      Recorded Projects:
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {summary.topProjects.map((p, i) => (
+                        <span
+                          key={i}
+                          className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] truncate max-w-[200px]"
+                        >
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Action Button */}
+              <button
+                onClick={() => onSelectDistrict(d.district)}
+                className="w-full mt-2 py-1.5 px-3 rounded-lg bg-slate-800/70 hover:bg-rose-600/90 text-slate-300 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5"
+              >
+                <span>Filter {d.district} Transactions</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           );
         })}

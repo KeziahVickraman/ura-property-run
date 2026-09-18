@@ -1,458 +1,364 @@
 /**
- * Singapore Private Property API Client & Integration Service
- * Placeholder service designed to connect with any Singapore Real Estate Backend (e.g., URA API proxy, custom Express/Go/FastAPI service).
+ * Singapore Private Property API Client
+ * Exclusively integrated with the URA PMI_Resi_Transaction Data Service endpoint (/api/transactions)
  */
 
 import {
-  ApiConfig,
-  ApiResponse,
   DistrictSummary,
   MarketAggregateStats,
   MarketTrendPoint,
-  PropertyFilterState,
   PropertyTransaction,
+  SaleType,
   SingaporeRegion,
 } from '../types/property';
+import { SINGAPORE_DISTRICTS } from '../data/singaporeDistricts';
 
-const STORAGE_KEY_CONFIG = 'sg_property_api_config';
+/**
+ * Parses URA contractDate (e.g. "0125", "1224", "2025-01") into formatted representations
+ */
+export function formatUraContractDate(rawDate: string): { isoPeriod: string; display: string } {
+  if (!rawDate) return { isoPeriod: '2025-01', display: 'Jan 2025' };
 
-export const DEFAULT_API_CONFIG: ApiConfig = {
-  baseUrl: '/api/v1/properties',
-  apiKey: '',
-  authHeaderName: 'Authorization',
-  timeoutMs: 8000,
-  connected: false,
-  status: 'idle',
-  lastPingTime: null,
-  lastPingLatencyMs: null,
-  lastErrorMessage: null,
-};
-
-export class PropertyApiService {
-  private config: ApiConfig;
-
-  constructor() {
-    this.config = this.loadConfig();
-  }
-
-  public getConfig(): ApiConfig {
-    return { ...this.config };
-  }
-
-  public updateConfig(newConfig: Partial<ApiConfig>): ApiConfig {
-    this.config = { ...this.config, ...newConfig };
-    this.saveConfig();
-    return this.getConfig();
-  }
-
-  private loadConfig(): ApiConfig {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_CONFIG);
-      if (saved) {
-        return { ...DEFAULT_API_CONFIG, ...JSON.parse(saved) };
-      }
-    } catch {
-      // fallback to default
-    }
-    return { ...DEFAULT_API_CONFIG };
-  }
-
-  private saveConfig(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(this.config));
-    } catch {
-      // ignore local storage error
-    }
-  }
-
-  private getHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-    if (this.config.apiKey) {
-      headers[this.config.authHeaderName || 'Authorization'] = this.config.apiKey.startsWith('Bearer ')
-        ? this.config.apiKey
-        : `Bearer ${this.config.apiKey}`;
-    }
-    return headers;
-  }
-
-  /**
-   * Test connection to the configured backend API
-   */
-  public async testConnection(customUrl?: string, customKey?: string): Promise<{
-    ok: boolean;
-    status: number;
-    latencyMs: number;
-    message: string;
-    endpoint: string;
-    payload?: unknown;
-  }> {
-    const targetUrl = (customUrl || this.config.baseUrl).replace(/\/$/, '') + '/health';
-    const startTime = performance.now();
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
-
-      const headers = this.getHeaders();
-      if (customKey) {
-        headers[this.config.authHeaderName] = `Bearer ${customKey}`;
-      }
-
-      const response = await fetch(targetUrl, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const latencyMs = Math.round(performance.now() - startTime);
-
-      let payload: unknown = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = await response.text();
-      }
-
-      const ok = response.ok;
-      this.updateConfig({
-        connected: ok,
-        status: ok ? 'connected' : 'error',
-        lastPingTime: new Date().toISOString(),
-        lastPingLatencyMs: latencyMs,
-        lastErrorMessage: ok ? null : `HTTP ${response.status}: ${response.statusText}`,
-      });
-
-      return {
-        ok,
-        status: response.status,
-        latencyMs,
-        message: ok ? 'Backend handshake successful' : `Server responded with status ${response.status}`,
-        endpoint: targetUrl,
-        payload,
-      };
-    } catch (err: unknown) {
-      const latencyMs = Math.round(performance.now() - startTime);
-      const errorMessage = err instanceof Error ? err.message : 'Connection failed';
-
-      this.updateConfig({
-        connected: false,
-        status: 'error',
-        lastPingTime: new Date().toISOString(),
-        lastPingLatencyMs: latencyMs,
-        lastErrorMessage: errorMessage,
-      });
-
-      return {
-        ok: false,
-        status: 0,
-        latencyMs,
-        message: errorMessage,
-        endpoint: targetUrl,
-      };
-    }
-  }
-
-  /**
-   * Fetch aggregate market statistics from GET /api/v1/properties/stats
-   */
-  public async fetchMarketStats(filters?: Partial<PropertyFilterState>): Promise<ApiResponse<MarketAggregateStats>> {
-    const params = new URLSearchParams();
-    if (filters?.selectedRegion && filters.selectedRegion !== 'ALL') {
-      params.append('region', filters.selectedRegion);
-    }
-    if (filters?.selectedDistrict && filters.selectedDistrict !== 'ALL') {
-      params.append('district', filters.selectedDistrict);
-    }
-    if (filters?.selectedPropertyType && filters.selectedPropertyType !== 'ALL') {
-      params.append('propertyType', filters.selectedPropertyType);
-    }
-
-    const endpoint = `${this.config.baseUrl.replace(/\/$/, '')}/stats${params.toString() ? `?${params.toString()}` : ''}`;
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      return {
-        success: true,
-        data: data.data || data,
-        timestamp: new Date().toISOString(),
-        endpoint,
-      };
-    } catch (err) {
-      // By default when no backend is attached, return empty placeholder structure
-      return {
-        success: false,
-        data: null,
-        message: err instanceof Error ? err.message : 'Backend not connected',
-        timestamp: new Date().toISOString(),
-        endpoint,
-      };
-    }
-  }
-
-  /**
-   * Fetch transaction list from GET /api/v1/properties/transactions
-   */
-  public async fetchTransactions(filters?: Partial<PropertyFilterState>): Promise<ApiResponse<PropertyTransaction[]>> {
-    const params = new URLSearchParams();
-    if (filters?.searchQuery) params.append('q', filters.searchQuery);
-    if (filters?.selectedRegion && filters.selectedRegion !== 'ALL') params.append('region', filters.selectedRegion);
-    if (filters?.selectedDistrict && filters.selectedDistrict !== 'ALL') params.append('district', filters.selectedDistrict);
-    if (filters?.selectedPropertyType && filters.selectedPropertyType !== 'ALL') params.append('propertyType', filters.selectedPropertyType);
-    if (filters?.selectedTenure && filters.selectedTenure !== 'ALL') params.append('tenure', filters.selectedTenure);
-    if (filters?.selectedSaleType && filters.selectedSaleType !== 'ALL') params.append('typeOfSale', filters.selectedSaleType);
-    if (filters?.minPsf) params.append('minPsf', filters.minPsf.toString());
-    if (filters?.maxPsf) params.append('maxPsf', filters.maxPsf.toString());
-    if (filters?.sortBy) params.append('sortBy', filters.sortBy);
-    if (filters?.sortOrder) params.append('sortOrder', filters.sortOrder);
-    if (filters?.page) params.append('page', filters.page.toString());
-    if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
-
-    const endpoint = `${this.config.baseUrl.replace(/\/$/, '')}/transactions${params.toString() ? `?${params.toString()}` : ''}`;
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const json = await res.json();
-      return {
-        success: true,
-        data: json.data || json,
-        totalCount: json.totalCount ?? (Array.isArray(json) ? json.length : 0),
-        page: filters?.page || 1,
-        pageSize: filters?.pageSize || 20,
-        timestamp: new Date().toISOString(),
-        endpoint,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        data: null,
-        totalCount: 0,
-        message: err instanceof Error ? err.message : 'Backend not connected',
-        timestamp: new Date().toISOString(),
-        endpoint,
-      };
-    }
-  }
-
-  /**
-   * Fetch district price index summaries from GET /api/v1/properties/districts
-   */
-  public async fetchDistrictSummaries(region?: SingaporeRegion | 'ALL'): Promise<ApiResponse<DistrictSummary[]>> {
-    const params = new URLSearchParams();
-    if (region && region !== 'ALL') params.append('region', region);
-
-    const endpoint = `${this.config.baseUrl.replace(/\/$/, '')}/districts${params.toString() ? `?${params.toString()}` : ''}`;
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      return {
-        success: true,
-        data: json.data || json,
-        timestamp: new Date().toISOString(),
-        endpoint,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        data: null,
-        message: err instanceof Error ? err.message : 'Backend not connected',
-        timestamp: new Date().toISOString(),
-        endpoint,
-      };
-    }
-  }
-
-  /**
-   * Fetch quarterly market trends from GET /api/v1/properties/trends
-   */
-  public async fetchMarketTrends(): Promise<ApiResponse<MarketTrendPoint[]>> {
-    const endpoint = `${this.config.baseUrl.replace(/\/$/, '')}/trends`;
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      return {
-        success: true,
-        data: json.data || json,
-        timestamp: new Date().toISOString(),
-        endpoint,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        data: null,
-        message: err instanceof Error ? err.message : 'Backend not connected',
-        timestamp: new Date().toISOString(),
-        endpoint,
-      };
-    }
-  }
-
-  /**
-   * Sample schema generator for testing purposes (Optional toggle in the UI so the developer can see the format)
-   */
-  public getSampleSchemaDefinition() {
+  // If already YYYY-MM
+  if (rawDate.includes('-')) {
+    const [year, month] = rawDate.split('-');
+    const mNum = parseInt(month, 10);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return {
-      endpoints: [
-        {
-          method: 'GET',
-          path: '/api/v1/properties/health',
-          description: 'Healthcheck and API readiness ping',
-          responseExample: {
-            status: 'healthy',
-            region: 'ap-southeast-1',
-            service: 'singapore-property-api',
-            version: '1.0.0',
-            timestamp: '2025-02-15T08:30:00Z',
-          },
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/properties/stats',
-          description: 'Market overview statistics across Singapore private residential sectors',
-          queryParams: ['region (CCR|RCR|OCR)', 'district (D01-D28)', 'propertyType'],
-          responseExample: {
-            averagePsf: 2380,
-            medianPriceSgd: 2150000,
-            totalTransactions: 3410,
-            highestPsf: 5850,
-            lowestPsf: 1120,
-            ccrAvgPsf: 3120,
-            rcrAvgPsf: 2450,
-            ocrAvgPsf: 1780,
-            quarterlyChangePct: 1.4,
-            annualChangePct: 4.8,
-            lastUpdated: '2025-02-15T00:00:00Z',
-          },
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/properties/transactions',
-          description: 'Paginated list of Singapore private residential property sales',
-          queryParams: ['q', 'region', 'district', 'propertyType', 'tenure', 'typeOfSale', 'minPsf', 'maxPsf', 'page', 'pageSize', 'sortBy', 'sortOrder'],
-          responseExample: {
-            data: [
-              {
-                id: 'tx-sg-09-001',
-                contractDate: '2025-02-10',
-                projectName: 'THE MARQ ON PATERSON HILL',
-                street: 'Paterson Hill',
-                district: 'D09',
-                region: 'CCR',
-                propertyType: 'Condominium',
-                tenure: 'Freehold',
-                areaSqft: 3100,
-                areaSqm: 288,
-                priceSgd: 13950000,
-                unitPricePsf: 4500,
-                unitPricePsm: 48437,
-                floorRange: '16 to 20',
-                typeOfSale: 'Resale',
-                completionYear: 2011,
-                postalCode: '238567',
-              }
-            ],
-            totalCount: 3410,
-            page: 1,
-            pageSize: 20,
-          },
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/properties/districts',
-          description: 'District level median price and average PSF aggregations',
-          queryParams: ['region'],
-          responseExample: [
-            {
-              district: 'D09',
-              name: 'Orchard, Cairnhill, River Valley',
-              region: 'CCR',
-              averagePsf: 3250,
-              medianPriceSgd: 3400000,
-              transactionCount: 280,
-              topProjects: ['The Marq', 'Cairnhill 16', 'Klimt Cairnhill'],
-            }
-          ],
-        },
-        {
-          method: 'GET',
-          path: '/api/v1/properties/trends',
-          description: 'Quarterly PSF price trends for CCR, RCR, OCR, and islandwide',
-          responseExample: [
-            { period: '2024-Q1', overallPsf: 2280, ccrPsf: 3010, rcrPsf: 2360, ocrPsf: 1710, volume: 820 },
-            { period: '2024-Q2', overallPsf: 2310, ccrPsf: 3050, rcrPsf: 2390, ocrPsf: 1730, volume: 890 },
-            { period: '2024-Q3', overallPsf: 2345, ccrPsf: 3090, rcrPsf: 2420, ocrPsf: 1750, volume: 840 },
-            { period: '2024-Q4', overallPsf: 2380, ccrPsf: 3120, rcrPsf: 2450, ocrPsf: 1780, volume: 860 },
-          ],
-        },
-        {
-          method: 'GET',
-          path: '/api/token',
-          description: 'Step 1: Trade AccessKey for today\'s daily URA Token (https://eservice.ura.gov.sg/uraDataService/insertNewToken/v1)',
-          headers: ['AccessKey'],
-          responseExample: {
-            status: 'Success',
-            token: 'eyJhbGciOi...',
-            dateKey: '2025-02-15',
-            cached: false,
-          },
-        },
-        {
-          method: 'GET',
-          path: '/api/transactions',
-          description: 'Step 2: Invoke URA PMI_Resi_Transaction sending BOTH AccessKey and Token headers',
-          queryParams: ['service', 'batch'],
-          headers: ['AccessKey'],
-          responseExample: {
-            Status: 'Success',
-            Result: [
-              {
-                street: 'CAIRNHILL ROAD',
-                project: 'THE RITZ-CARLTON RESIDENCES',
-                marketSegment: 'CCR',
-                transaction: [
-                  {
-                    area: '263',
-                    floorRange: '31-35',
-                    contractDate: '0125',
-                    price: '10380000',
-                    propertyType: 'Condominium',
-                    district: '09',
-                    tenure: 'Freehold',
-                  }
-                ]
-              }
-            ],
-          },
-        },
-      ],
+      isoPeriod: `${year}-${month.padStart(2, '0')}`,
+      display: `${months[mNum - 1] || month} ${year}`,
     };
   }
+
+  // URA standard format is MMYY (e.g. "0125" -> month 01, year 2025)
+  if (rawDate.length === 4) {
+    const mm = rawDate.slice(0, 2);
+    const yy = rawDate.slice(2, 4);
+    const year = `20${yy}`;
+    const mNum = parseInt(mm, 10);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthName = months[mNum - 1] || mm;
+    return {
+      isoPeriod: `${year}-${mm}`,
+      display: `${monthName} ${year}`,
+    };
+  }
+
+  return { isoPeriod: rawDate, display: rawDate };
 }
 
-export const propertyApi = new PropertyApiService();
+/**
+ * Normalizes URA type of sale code
+ * 1 = New Sale
+ * 2 = Sub Sale
+ * 3 = Resale
+ */
+export function mapUraSaleType(rawType: string): SaleType {
+  if (rawType === '1' || rawType?.toLowerCase() === 'new sale') return 'New Sale';
+  if (rawType === '2' || rawType?.toLowerCase() === 'sub sale') return 'Sub Sale';
+  return 'Resale';
+}
+
+/**
+ * Normalizes URA district string to "D01".."D28"
+ */
+export function formatDistrictCode(rawDistrict: string | number): string {
+  const clean = String(rawDistrict || '').replace(/^D/i, '').trim();
+  const num = parseInt(clean, 10);
+  if (isNaN(num) || num < 1 || num > 28) return 'D09';
+  return `D${String(num).padStart(2, '0')}`;
+}
+
+/**
+ * Normalizes raw URA PMI_Resi_Transaction response into standard PropertyTransaction list
+ */
+export function transformUraResponse(uraPayload: any): {
+  transactions: PropertyTransaction[];
+  isLive: boolean;
+  batch: number;
+} {
+  const resultList = uraPayload?.Result || [];
+  const isLive = !!uraPayload?.isLive;
+  const batch = Number(uraPayload?.batch) || 1;
+  const transactions: PropertyTransaction[] = [];
+
+  let index = 0;
+  for (const projectItem of resultList) {
+    const projectName = projectItem.project || 'Private Residential Property';
+    const street = projectItem.street || '';
+    const region: SingaporeRegion = projectItem.marketSegment || 'CCR';
+    const xCoord = projectItem.x;
+    const yCoord = projectItem.y;
+
+    const txList = Array.isArray(projectItem.transaction) ? projectItem.transaction : [];
+
+    for (const tx of txList) {
+      index++;
+      const areaSqm = parseFloat(tx.area) || 0;
+      const areaSqft = Math.round(areaSqm * 10.7639) || 0;
+      const priceSgd = parseFloat(tx.price) || 0;
+
+      const unitPricePsf = areaSqft > 0 ? Math.round(priceSgd / areaSqft) : 0;
+      const unitPricePsm = areaSqm > 0 ? Math.round(priceSgd / areaSqm) : 0;
+
+      const { isoPeriod, display } = formatUraContractDate(tx.contractDate);
+      const district = formatDistrictCode(tx.district);
+      const typeOfSale = mapUraSaleType(tx.typeOfSale);
+      const propertyType = tx.propertyType || 'Condominium';
+      const tenure = tx.tenure || 'Freehold';
+      const floorRange = tx.floorRange || '-';
+      const noOfUnits = parseInt(tx.noOfUnits, 10) || 1;
+      const nettPrice = tx.nettPrice ? parseFloat(tx.nettPrice) : undefined;
+
+      transactions.push({
+        id: `ura-${batch}-${index}-${projectName.replace(/\s+/g, '_')}-${priceSgd}`,
+        contractDate: isoPeriod,
+        contractDateDisplay: display,
+        projectName,
+        street,
+        district,
+        region,
+        propertyType,
+        tenure,
+        areaSqm,
+        areaSqft,
+        priceSgd,
+        unitPricePsf,
+        unitPricePsm,
+        floorRange,
+        typeOfSale,
+        noOfUnits,
+        nettPrice,
+        x: xCoord,
+        y: yCoord,
+      });
+    }
+  }
+
+  // Sort descending by contractDate and price
+  transactions.sort((a, b) => {
+    if (b.contractDate !== a.contractDate) {
+      return b.contractDate.localeCompare(a.contractDate);
+    }
+    return b.priceSgd - a.priceSgd;
+  });
+
+  return { transactions, isLive, batch };
+}
+
+/**
+ * Calculates aggregate market statistics purely from transacted records in the endpoint
+ */
+export function calculateMarketStats(transactions: PropertyTransaction[]): MarketAggregateStats {
+  if (!transactions || transactions.length === 0) {
+    return {
+      averagePsf: null,
+      medianPriceSgd: null,
+      totalTransactions: 0,
+      highestPsf: null,
+      lowestPsf: null,
+      ccrAvgPsf: null,
+      rcrAvgPsf: null,
+      ocrAvgPsf: null,
+      newSaleCount: 0,
+      resaleCount: 0,
+      lastUpdated: null,
+    };
+  }
+
+  const validPsfs = transactions.map((t) => t.unitPricePsf).filter((p) => p > 0);
+  const avgPsf = validPsfs.length > 0 ? Math.round(validPsfs.reduce((a, b) => a + b, 0) / validPsfs.length) : null;
+  const highestPsf = validPsfs.length > 0 ? Math.max(...validPsfs) : null;
+  const lowestPsf = validPsfs.length > 0 ? Math.min(...validPsfs) : null;
+
+  // Median Price
+  const sortedPrices = [...transactions.map((t) => t.priceSgd).filter((p) => p > 0)].sort((a, b) => a - b);
+  let medianPrice: number | null = null;
+  if (sortedPrices.length > 0) {
+    const mid = Math.floor(sortedPrices.length / 2);
+    medianPrice = sortedPrices.length % 2 === 0
+      ? Math.round((sortedPrices[mid - 1] + sortedPrices[mid]) / 2)
+      : sortedPrices[mid];
+  }
+
+  // Region averages
+  const ccrPsfs = transactions.filter((t) => t.region === 'CCR' && t.unitPricePsf > 0).map((t) => t.unitPricePsf);
+  const rcrPsfs = transactions.filter((t) => t.region === 'RCR' && t.unitPricePsf > 0).map((t) => t.unitPricePsf);
+  const ocrPsfs = transactions.filter((t) => t.region === 'OCR' && t.unitPricePsf > 0).map((t) => t.unitPricePsf);
+
+  const ccrAvgPsf = ccrPsfs.length > 0 ? Math.round(ccrPsfs.reduce((a, b) => a + b, 0) / ccrPsfs.length) : null;
+  const rcrAvgPsf = rcrPsfs.length > 0 ? Math.round(rcrPsfs.reduce((a, b) => a + b, 0) / rcrPsfs.length) : null;
+  const ocrAvgPsf = ocrPsfs.length > 0 ? Math.round(ocrPsfs.reduce((a, b) => a + b, 0) / ocrPsfs.length) : null;
+
+  const newSaleCount = transactions.filter((t) => t.typeOfSale === 'New Sale').length;
+  const resaleCount = transactions.filter((t) => t.typeOfSale === 'Resale').length;
+
+  return {
+    averagePsf: avgPsf,
+    medianPriceSgd: medianPrice,
+    totalTransactions: transactions.length,
+    highestPsf,
+    lowestPsf,
+    ccrAvgPsf,
+    rcrAvgPsf,
+    ocrAvgPsf,
+    newSaleCount,
+    resaleCount,
+    lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+/**
+ * Calculates district summaries directly from transacted records
+ */
+export function calculateDistrictSummaries(transactions: PropertyTransaction[]): DistrictSummary[] {
+  return SINGAPORE_DISTRICTS.map((def) => {
+    const inDistrict = transactions.filter((t) => t.district === def.district);
+    const validPsfs = inDistrict.map((t) => t.unitPricePsf).filter((p) => p > 0);
+    const avgPsf = validPsfs.length > 0 ? Math.round(validPsfs.reduce((a, b) => a + b, 0) / validPsfs.length) : null;
+
+    const prices = inDistrict.map((t) => t.priceSgd).filter((p) => p > 0).sort((a, b) => a - b);
+    let medianPrice: number | null = null;
+    if (prices.length > 0) {
+      const mid = Math.floor(prices.length / 2);
+      medianPrice = prices.length % 2 === 0 ? Math.round((prices[mid - 1] + prices[mid]) / 2) : prices[mid];
+    }
+
+    // Top projects
+    const projectCounts = new Map<string, number>();
+    for (const t of inDistrict) {
+      projectCounts.set(t.projectName, (projectCounts.get(t.projectName) || 0) + 1);
+    }
+    const topProjects = Array.from(projectCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name]) => name);
+
+    return {
+      district: def.district,
+      name: def.name,
+      region: def.region,
+      averagePsf: avgPsf,
+      medianPriceSgd: medianPrice,
+      transactionCount: inDistrict.length,
+      topProjects,
+    };
+  });
+}
+
+/**
+ * Calculates monthly / quarterly time trend points from transactions
+ */
+export function calculateMarketTrends(transactions: PropertyTransaction[]): MarketTrendPoint[] {
+  if (!transactions || transactions.length === 0) return [];
+
+  // Group by contractDate (YYYY-MM)
+  const groups = new Map<string, PropertyTransaction[]>();
+  for (const t of transactions) {
+    if (!groups.has(t.contractDate)) {
+      groups.set(t.contractDate, []);
+    }
+    groups.get(t.contractDate)!.push(t);
+  }
+
+  // Sort periods ascending
+  const sortedPeriods = Array.from(groups.keys()).sort();
+
+  return sortedPeriods.map((period) => {
+    const list = groups.get(period)!;
+    const validPsfs = list.map((t) => t.unitPricePsf).filter((p) => p > 0);
+    const overallPsf = validPsfs.length > 0 ? Math.round(validPsfs.reduce((a, b) => a + b, 0) / validPsfs.length) : null;
+
+    const ccr = list.filter((t) => t.region === 'CCR' && t.unitPricePsf > 0).map((t) => t.unitPricePsf);
+    const rcr = list.filter((t) => t.region === 'RCR' && t.unitPricePsf > 0).map((t) => t.unitPricePsf);
+    const ocr = list.filter((t) => t.region === 'OCR' && t.unitPricePsf > 0).map((t) => t.unitPricePsf);
+
+    const ccrPsf = ccr.length > 0 ? Math.round(ccr.reduce((a, b) => a + b, 0) / ccr.length) : null;
+    const rcrPsf = rcr.length > 0 ? Math.round(rcr.reduce((a, b) => a + b, 0) / rcr.length) : null;
+    const ocrPsf = ocr.length > 0 ? Math.round(ocr.reduce((a, b) => a + b, 0) / ocr.length) : null;
+
+    const sampleTx = list[0];
+    const periodLabel = sampleTx?.contractDateDisplay || period;
+
+    return {
+      period,
+      periodLabel,
+      overallPsf,
+      ccrPsf,
+      rcrPsf,
+      ocrPsf,
+      volume: list.length,
+    };
+  });
+}
+
+/**
+ * Fetches transaction records from the URA PMI_Resi_Transaction endpoint
+ */
+export async function fetchUraTransactions(batch = 1): Promise<{
+  transactions: PropertyTransaction[];
+  isLive: boolean;
+  batch: number;
+  rawResponse: any;
+}> {
+  const url = `/api/transactions?batch=${batch}&service=PMI_Resi_Transaction`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch transactions: HTTP ${res.status}`);
+  }
+
+  const json = await res.json();
+  const { transactions, isLive, batch: parsedBatch } = transformUraResponse(json);
+
+  return {
+    transactions,
+    isLive,
+    batch: parsedBatch,
+    rawResponse: json,
+  };
+}
+
+export { calculateDistrictSummaries as generateDistrictSummaries };
+export { calculateMarketTrends as generateMarketTrends };
+
+/**
+ * Computes Singapore IRAS Buyer's Stamp Duty (BSD) on residential transactions
+ */
+export function calculateBsd(price: number): { totalBsd: number; breakdown: Array<{ tier: string; rate: string; amount: number }> } {
+  let remaining = price;
+  let totalBsd = 0;
+  const breakdown: Array<{ tier: string; rate: string; amount: number }> = [];
+
+  const tiers = [
+    { cap: 180000, rate: 0.01, rateLabel: '1%', tierLabel: 'First $180,000' },
+    { cap: 180000, rate: 0.02, rateLabel: '2%', tierLabel: 'Next $180,000 ($180k - $360k)' },
+    { cap: 640000, rate: 0.03, rateLabel: '3%', tierLabel: 'Next $640,000 ($360k - $1M)' },
+    { cap: 500000, rate: 0.04, rateLabel: '4%', tierLabel: 'Next $500,000 ($1M - $1.5M)' },
+    { cap: 1500000, rate: 0.05, rateLabel: '5%', tierLabel: 'Next $1,500,000 ($1.5M - $3M)' },
+    { cap: Infinity, rate: 0.06, rateLabel: '6%', tierLabel: 'Amounts exceeding $3,000,000' },
+  ];
+
+  for (const t of tiers) {
+    if (remaining <= 0) break;
+    const taxableInTier = Math.min(remaining, t.cap);
+    const tax = taxableInTier * t.rate;
+    totalBsd += tax;
+    breakdown.push({
+      tier: t.tierLabel,
+      rate: t.rateLabel,
+      amount: Math.round(tax),
+    });
+    remaining -= taxableInTier;
+  }
+
+  return {
+    totalBsd: Math.round(totalBsd),
+    breakdown,
+  };
+}

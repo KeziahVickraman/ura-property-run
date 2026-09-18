@@ -1,47 +1,37 @@
 import React from 'react';
 import { 
-  LineChart, 
   TrendingUp, 
   BarChart3, 
-  Terminal, 
-  Database, 
-  Info,
   Calendar,
-  Layers,
-  ArrowUpRight
+  Layers
 } from 'lucide-react';
 import { MarketTrendPoint } from '../types/property';
 
 interface MarketAnalyticsProps {
-  trends: MarketTrendPoint[] | null;
-  onOpenApiModal: () => void;
+  trends: MarketTrendPoint[];
   unitMeasurement: 'PSF' | 'PSM';
 }
 
 export const MarketAnalytics: React.FC<MarketAnalyticsProps> = ({
   trends,
-  onOpenApiModal,
   unitMeasurement,
 }) => {
-  const isAwaitingTrends = !trends || trends.length === 0;
-
-  // Multiplier for PSM conversion
   const unitFactor = unitMeasurement === 'PSM' ? 10.7639 : 1;
 
-  // If trends data is populated, calculate chart bounds
   const chartData = React.useMemo(() => {
     if (!trends || trends.length === 0) return [];
     return trends.map((t) => ({
       period: t.period,
+      label: t.periodLabel || t.period,
       overall: t.overallPsf ? Math.round(t.overallPsf * unitFactor) : null,
       ccr: t.ccrPsf ? Math.round(t.ccrPsf * unitFactor) : null,
       rcr: t.rcrPsf ? Math.round(t.rcrPsf * unitFactor) : null,
       ocr: t.ocrPsf ? Math.round(t.ocrPsf * unitFactor) : null,
-      volume: t.volume,
+      volume: t.volume || 0,
     }));
   }, [trends, unitFactor]);
 
-  // Find max & min values for SVG chart scaling
+  // Max and min for SVG scaling
   const { maxVal, minVal } = React.useMemo(() => {
     if (chartData.length === 0) return { maxVal: 4000, minVal: 1000 };
     let max = 0;
@@ -54,33 +44,38 @@ export const MarketAnalytics: React.FC<MarketAnalyticsProps> = ({
         }
       });
     });
+    if (min === Infinity) min = 1000;
+    if (max === 0) max = 3000;
     return {
-      maxVal: Math.ceil(max * 1.1),
-      minVal: Math.floor(min * 0.9),
+      maxVal: Math.ceil(max * 1.08),
+      minVal: Math.floor(min * 0.92),
     };
   }, [chartData]);
 
   const svgWidth = 800;
-  const svgHeight = 280;
-  const padding = { top: 30, right: 30, bottom: 40, left: 70 };
+  const svgHeight = 260;
+  const padding = { top: 25, right: 30, bottom: 40, left: 65 };
   const innerWidth = svgWidth - padding.left - padding.right;
   const innerHeight = svgHeight - padding.top - padding.bottom;
 
   const getY = (val: number | null) => {
-    if (val === null) return innerHeight;
+    if (val === null) return innerHeight + padding.top;
     const ratio = (val - minVal) / (maxVal - minVal || 1);
     return innerHeight - ratio * innerHeight + padding.top;
   };
 
   const getX = (idx: number) => {
-    if (chartData.length <= 1) return padding.left;
+    if (chartData.length <= 1) return padding.left + innerWidth / 2;
     return padding.left + (idx / (chartData.length - 1)) * innerWidth;
   };
 
   const generatePath = (key: 'overall' | 'ccr' | 'rcr' | 'ocr') => {
     if (chartData.length === 0) return '';
-    const points = chartData.map((d, i) => `${getX(i)},${getY(d[key])}`);
-    return `M ${points.join(' L ')}`;
+    const validPoints = chartData
+      .map((d, i) => (d[key] !== null ? `${getX(i)},${getY(d[key])}` : null))
+      .filter(Boolean);
+    if (validPoints.length === 0) return '';
+    return `M ${validPoints.join(' L ')}`;
   };
 
   return (
@@ -91,178 +86,187 @@ export const MarketAnalytics: React.FC<MarketAnalyticsProps> = ({
           <div className="flex items-center gap-2">
             <h2 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-rose-400" />
-              Singapore Private Residential Price Trends
+              Singapore Residential Price &amp; Volume Trends
             </h2>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-              Quarterly Series
+              Computed from Endpoint
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-            Historical price index movement across Core Central Region (CCR), Rest of Central Region (RCR), and Outside Central Region (OCR).
+            Historical price distribution and transacted volumes derived strictly from contract dates in the URA PMI_Resi_Transaction feed.
           </p>
         </div>
 
-        <button
-          onClick={onOpenApiModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:text-white text-xs font-mono transition-colors"
-        >
-          <Terminal className="w-3.5 h-3.5 text-rose-400" />
-          <span>Endpoint: GET /trends</span>
-        </button>
-      </div>
-
-      {/* Main Trends Chart Box */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-800/80">
-          <div>
-            <h3 className="text-sm font-bold text-slate-200">
-              Median Price Index by Region ({unitMeasurement})
-            </h3>
-            <p className="text-xs text-slate-400">
-              Quarterly price trajectories in Singapore Dollars (S$)
-            </p>
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-3 text-xs font-mono bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-1 bg-rose-500 rounded-full"></span>
+            <span className="text-slate-300">Overall</span>
           </div>
-
-          {/* Chart Legend */}
-          <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-1 rounded bg-emerald-400"></span>
-              <span className="text-slate-300">CCR (Luxury)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-1 rounded bg-sky-400"></span>
-              <span className="text-slate-300">RCR (City Fringe)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-1 rounded bg-amber-400"></span>
-              <span className="text-slate-300">OCR (Suburbs)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-1 rounded bg-rose-400"></span>
-              <span className="text-slate-300">Islandwide Overall</span>
-            </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-1 bg-purple-400 rounded-full"></span>
+            <span className="text-slate-400">CCR</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-1 bg-sky-400 rounded-full"></span>
+            <span className="text-slate-400">RCR</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-1 bg-amber-400 rounded-full"></span>
+            <span className="text-slate-400">OCR</span>
           </div>
         </div>
+      </div>
 
-        {/* Chart View or Awaiting State */}
-        {isAwaitingTrends ? (
-          <div className="py-12 px-4 flex flex-col items-center justify-center text-center">
-            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-3 shadow-xs">
-              <LineChart className="w-6 h-6" />
-            </div>
+      {/* SVG Trend Chart */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 sm:p-6 overflow-hidden">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xs sm:text-sm font-semibold text-slate-200">
+            Unit Price Trajectory ({unitMeasurement}) by Market Segment
+          </h3>
+          <span className="text-[11px] font-mono text-slate-400">
+            Range: S${minVal.toLocaleString('en-SG')} - S${maxVal.toLocaleString('en-SG')}
+          </span>
+        </div>
 
-            <h4 className="text-sm font-bold text-white mb-1">
-              Awaiting Market Trend Data Feed
-            </h4>
-            <p className="text-xs text-slate-400 max-w-md mb-5 leading-relaxed">
-              Historical quarterly time-series data is ready to connect via <code className="font-mono text-amber-300">GET /api/v1/properties/trends</code>. Connect your backend endpoint or verify using the sample schema.
-            </p>
-
-            <button
-              onClick={onOpenApiModal}
-              className="px-3.5 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5"
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              <span>Configure Trend API Connection</span>
-            </button>
-          </div>
-        ) : (
-          <div className="w-full overflow-x-auto">
-            <div className="min-w-[650px]">
-              <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-auto text-xs font-mono">
-                {/* Horizontal Grid lines */}
-                {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-                  const y = innerHeight - ratio * innerHeight + padding.top;
-                  const val = Math.round(minVal + ratio * (maxVal - minVal));
-                  return (
-                    <g key={ratio}>
-                      <line
-                        x1={padding.left}
-                        y1={y}
-                        x2={svgWidth - padding.right}
-                        y2={y}
-                        stroke="#334155"
-                        strokeDasharray="4 4"
-                        strokeWidth="1"
-                      />
-                      <text
-                        x={padding.left - 10}
-                        y={y + 4}
-                        fill="#94a3b8"
-                        textAnchor="end"
-                        fontSize="10"
-                      >
-                        S${val.toLocaleString()}
-                      </text>
-                    </g>
-                  );
-                })}
-
-                {/* X Axis Periods */}
-                {chartData.map((d, i) => (
+        <div className="w-full overflow-x-auto">
+          <svg
+            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+            className="w-full h-auto min-w-[600px]"
+          >
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+              const y = padding.top + innerHeight * (1 - pct);
+              const val = Math.round(minVal + (maxVal - minVal) * pct);
+              return (
+                <g key={i}>
+                  <line
+                    x1={padding.left}
+                    y1={y}
+                    x2={svgWidth - padding.right}
+                    y2={y}
+                    stroke="#1e293b"
+                    strokeDasharray="4 4"
+                  />
                   <text
-                    key={d.period}
-                    x={getX(i)}
-                    y={svgHeight - 10}
-                    fill="#94a3b8"
-                    textAnchor="middle"
-                    fontSize="11"
+                    x={padding.left - 10}
+                    y={y + 4}
+                    textAnchor="end"
+                    fill="#64748b"
+                    fontSize="10"
+                    fontFamily="monospace"
                   >
-                    {d.period}
+                    ${val.toLocaleString('en-SG')}
                   </text>
-                ))}
+                </g>
+              );
+            })}
 
-                {/* Trend Lines */}
-                <path d={generatePath('ccr')} fill="none" stroke="#34d399" strokeWidth="2.5" />
-                <path d={generatePath('rcr')} fill="none" stroke="#38bdf8" strokeWidth="2.5" />
-                <path d={generatePath('ocr')} fill="none" stroke="#fbbf24" strokeWidth="2.5" />
-                <path d={generatePath('overall')} fill="none" stroke="#fb7185" strokeWidth="3" />
+            {/* Lines */}
+            <path
+              d={generatePath('ocr')}
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth="2"
+              strokeDasharray="3 3"
+            />
+            <path
+              d={generatePath('rcr')}
+              fill="none"
+              stroke="#38bdf8"
+              strokeWidth="2"
+              strokeDasharray="3 3"
+            />
+            <path
+              d={generatePath('ccr')}
+              fill="none"
+              stroke="#c084fc"
+              strokeWidth="2"
+              strokeDasharray="3 3"
+            />
+            <path
+              d={generatePath('overall')}
+              fill="none"
+              stroke="#f43f5e"
+              strokeWidth="3"
+            />
 
-                {/* Data Points */}
-                {chartData.map((d, i) => (
-                  <g key={i}>
-                    {d.ccr && <circle cx={getX(i)} cy={getY(d.ccr)} r="3.5" fill="#34d399" />}
-                    {d.rcr && <circle cx={getX(i)} cy={getY(d.rcr)} r="3.5" fill="#38bdf8" />}
-                    {d.ocr && <circle cx={getX(i)} cy={getY(d.ocr)} r="3.5" fill="#fbbf24" />}
-                    {d.overall && <circle cx={getX(i)} cy={getY(d.overall)} r="4" fill="#fb7185" />}
-                  </g>
-                ))}
-              </svg>
-            </div>
-          </div>
-        )}
+            {/* Data Points */}
+            {chartData.map((d, i) => {
+              const x = getX(i);
+              return (
+                <g key={i}>
+                  {/* Overall Dot */}
+                  {d.overall !== null && (
+                    <circle
+                      cx={x}
+                      cy={getY(d.overall)}
+                      r="4"
+                      fill="#f43f5e"
+                      stroke="#0f172a"
+                      strokeWidth="2"
+                    />
+                  )}
+
+                  {/* Period X Axis Label */}
+                  <text
+                    x={x}
+                    y={svgHeight - 12}
+                    textAnchor="middle"
+                    fill="#94a3b8"
+                    fontSize="11"
+                    fontFamily="monospace"
+                  >
+                    {d.label}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
       </div>
 
-      {/* Singapore Real Estate Market Context Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-          <div className="flex items-center gap-2 text-emerald-400 font-semibold mb-2">
-            <Layers className="w-4 h-4" />
-            <span>Core Central Region (CCR)</span>
-          </div>
-          <p className="text-slate-400 leading-relaxed">
-            Districts 09, 10, 11, Marina Bay and Sentosa. Highest PSF pricing in Singapore, driven by ultra-high-net-worth investors, family offices, and luxury freehold developments.
-          </p>
+      {/* Period Aggregations Table */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden shadow-xs">
+        <div className="p-4 border-b border-slate-800 bg-slate-950/40">
+          <h3 className="text-xs sm:text-sm font-semibold text-slate-200">
+            Period Summary Table
+          </h3>
         </div>
 
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-          <div className="flex items-center gap-2 text-sky-400 font-semibold mb-2">
-            <Layers className="w-4 h-4" />
-            <span>Rest of Central Region (RCR)</span>
-          </div>
-          <p className="text-slate-400 leading-relaxed">
-            City fringe locations including Queenstown, East Coast, Novena, and Kallang. Balances proximity to the CBD with strong rental yields and appealing price quantum.
-          </p>
-        </div>
-
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-          <div className="flex items-center gap-2 text-amber-400 font-semibold mb-2">
-            <Layers className="w-4 h-4" />
-            <span>Outside Central Region (OCR)</span>
-          </div>
-          <p className="text-slate-400 leading-relaxed">
-            Mass market suburban residential heartlands (Jurong, Tampines, Punggol, Woodlands). Significant transaction volume, strong home-buyer demand, and attractive entry pricing.
-          </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs font-mono">
+            <thead>
+              <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[11px]">
+                <th className="py-2.5 px-4 font-medium">Contract Period</th>
+                <th className="py-2.5 px-4 font-medium text-right">Transactions</th>
+                <th className="py-2.5 px-4 font-medium text-right">Overall Avg ({unitMeasurement})</th>
+                <th className="py-2.5 px-4 font-medium text-right text-purple-300">CCR Avg</th>
+                <th className="py-2.5 px-4 font-medium text-right text-sky-300">RCR Avg</th>
+                <th className="py-2.5 px-4 font-medium text-right text-amber-300">OCR Avg</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {chartData.map((row) => (
+                <tr key={row.period} className="hover:bg-slate-800/40 transition-colors">
+                  <td className="py-3 px-4 text-white font-medium">{row.label}</td>
+                  <td className="py-3 px-4 text-right text-slate-300">{row.volume} units</td>
+                  <td className="py-3 px-4 text-right text-rose-400 font-bold">
+                    {row.overall ? `S$ ${row.overall.toLocaleString('en-SG')}` : '—'}
+                  </td>
+                  <td className="py-3 px-4 text-right text-slate-300">
+                    {row.ccr ? `S$ ${row.ccr.toLocaleString('en-SG')}` : '—'}
+                  </td>
+                  <td className="py-3 px-4 text-right text-slate-300">
+                    {row.rcr ? `S$ ${row.rcr.toLocaleString('en-SG')}` : '—'}
+                  </td>
+                  <td className="py-3 px-4 text-right text-slate-300">
+                    {row.ocr ? `S$ ${row.ocr.toLocaleString('en-SG')}` : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

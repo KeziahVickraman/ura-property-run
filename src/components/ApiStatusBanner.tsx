@@ -1,82 +1,92 @@
 import React from 'react';
-import { Terminal, ArrowUpRight, Zap, Database, Code, CheckCircle } from 'lucide-react';
-import { ApiConfig } from '../types/property';
+import { 
+  Database, 
+  Terminal, 
+  RefreshCw, 
+  CheckCircle2, 
+  ExternalLink,
+  Radio
+} from 'lucide-react';
 
 interface ApiStatusBannerProps {
-  apiConfig: ApiConfig;
+  isLive: boolean;
+  batch: number;
+  totalRecords: number;
+  isLoading: boolean;
+  onSelectBatch: (batch: number) => void;
+  onRefresh: () => void;
   onOpenApiModal: () => void;
-  onLoadMockPreview?: () => void;
-  isMockActive?: boolean;
 }
 
 export const ApiStatusBanner: React.FC<ApiStatusBannerProps> = ({
-  apiConfig,
+  isLive,
+  batch,
+  totalRecords,
+  isLoading,
+  onSelectBatch,
+  onRefresh,
   onOpenApiModal,
-  onLoadMockPreview,
-  isMockActive,
 }) => {
-  if (apiConfig.connected) {
-    return (
-      <div className="bg-emerald-950/40 border-b border-emerald-500/30 px-4 py-2 text-xs text-emerald-300">
-        <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-            <span>
-              Connected to backend: <code className="font-mono text-emerald-200">{apiConfig.baseUrl}</code>
-            </span>
-            {apiConfig.lastPingLatencyMs && (
-              <span className="text-emerald-400/80 font-mono">({apiConfig.lastPingLatencyMs}ms)</span>
-            )}
-          </div>
-          <button
-            onClick={onOpenApiModal}
-            className="underline hover:text-emerald-100 flex items-center gap-1 font-medium"
-          >
-            Manage Connection
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/30 border-b border-amber-500/20 px-4 py-2.5 text-xs text-slate-300">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center justify-center w-6 h-6 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0">
-            <Terminal className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <span className="font-semibold text-amber-300">API Integration Placeholders Ready</span>
-            <span className="text-slate-400 mx-1.5">&bull;</span>
-            <span className="text-slate-300">
-              No backend connected yet. Ready to receive private property transactions, PSF aggregates, and district trends.
+    <div className="bg-slate-950 border-b border-slate-800/80 px-4 py-2.5 text-xs text-slate-300">
+      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        {/* Left: Active Endpoint & Status Indicator */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[11px]">
+            <Radio className="w-3 h-3 animate-pulse text-emerald-400" />
+            <span className="font-semibold">
+              {isLive ? 'URA Live Stream Active' : 'URA PMI_Resi_Transaction Active'}
             </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-slate-400 font-mono text-[11px]">
+            <code className="text-slate-300 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+              GET /api/transactions?batch={batch}
+            </code>
+            <span className="text-slate-400">&bull;</span>
+            <span className="text-slate-300 font-medium">{totalRecords} transacted records</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
-          {onLoadMockPreview && (
-            <button
-              onClick={onLoadMockPreview}
-              className={`px-2.5 py-1 rounded border text-xs font-mono transition-colors flex items-center gap-1.5 ${
-                isMockActive
-                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
-              }`}
-              title="Toggle preview data to verify UI components without live backend"
-            >
-              <Code className="w-3 h-3 text-rose-400" />
-              <span>{isMockActive ? 'Reset to Awaiting Feed' : 'Preview Schema Mock'}</span>
-            </button>
-          )}
+        {/* Right: Batch Switcher & Actions */}
+        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-between sm:justify-end">
+          {/* URA Batch Selector */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[11px] font-mono">
+            <span className="px-1.5 text-slate-400">Batch:</span>
+            {[1, 2, 3, 4].map((b) => (
+              <button
+                key={b}
+                onClick={() => onSelectBatch(b)}
+                className={`px-2 py-0.5 rounded transition-colors ${
+                  batch === b
+                    ? 'bg-rose-600 text-white font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {b}
+              </button>
+            ))}
+          </div>
 
+          {/* Refresh Button */}
+          <button
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors text-xs font-mono disabled:opacity-50"
+            title="Refresh transactions from URA Data Service"
+          >
+            <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin text-rose-400' : ''}`} />
+            <span className="hidden xs:inline">Reload</span>
+          </button>
+
+          {/* Endpoint Contract Modal */}
           <button
             onClick={onOpenApiModal}
-            className="px-3 py-1 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 transition-colors font-medium flex items-center gap-1"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 text-rose-400 hover:text-rose-300 transition-colors text-xs font-mono"
+            title="Inspect URA Endpoint Specifications and cURL commands"
           >
-            <span>Connect Backend API</span>
-            <ArrowUpRight className="w-3 h-3" />
+            <Terminal className="w-3 h-3" />
+            <span className="hidden sm:inline">API Contract</span>
           </button>
         </div>
       </div>

@@ -1,19 +1,15 @@
 import React from 'react';
 import { 
   X, 
-  Building2, 
   MapPin, 
-  Calendar, 
-  Tag, 
-  Key, 
-  Maximize2, 
   Calculator, 
-  Layers,
-  Terminal,
-  ExternalLink
+  Terminal, 
+  Layers, 
+  FileText
 } from 'lucide-react';
 import { PropertyTransaction } from '../types/property';
 import { REGION_METADATA, SINGAPORE_DISTRICTS } from '../data/singaporeDistricts';
+import { calculateBsd } from '../services/propertyApi';
 
 interface PropertyDetailModalProps {
   property: PropertyTransaction | null;
@@ -31,37 +27,14 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
   if (!property) return null;
 
   const districtInfo = SINGAPORE_DISTRICTS.find((d) => d.district === property.district);
-  const regionMeta = REGION_METADATA[property.region];
-
-  // Calculate Singapore Buyer's Stamp Duty (BSD) for residential properties
-  // 1% on first $180,000
-  // 2% on next $180,000
-  // 3% on next $640,000
-  // 4% on next $500,000
-  // 5% on next $1,500,000
-  // 6% on amount in excess of $3,000,000
-  const calculateSingaporeBsd = (price: number) => {
-    let bsd = 0;
-    if (price <= 180000) {
-      bsd = price * 0.01;
-    } else if (price <= 360000) {
-      bsd = 1800 + (price - 180000) * 0.02;
-    } else if (price <= 1000000) {
-      bsd = 5400 + (price - 360000) * 0.03;
-    } else if (price <= 1500000) {
-      bsd = 24600 + (price - 1000000) * 0.04;
-    } else if (price <= 3000000) {
-      bsd = 44600 + (price - 1500000) * 0.05;
-    } else {
-      bsd = 119600 + (price - 3000000) * 0.06;
-    }
-    return Math.round(bsd);
+  const regionMeta = REGION_METADATA[property.region] || {
+    badgeClass: 'bg-slate-800 text-slate-300 border-slate-700',
   };
 
-  const estimatedBsd = calculateSingaporeBsd(property.priceSgd);
+  const bsdResult = calculateBsd(property.priceSgd);
 
-  const formatUnitPrice = (psfVal: number) => {
-    const finalVal = unitMeasurement === 'PSM' ? Math.round(psfVal * 10.7639) : psfVal;
+  const formatUnitPrice = (tx: PropertyTransaction) => {
+    const finalVal = unitMeasurement === 'PSM' ? tx.unitPricePsm : tx.unitPricePsf;
     return `S$ ${finalVal.toLocaleString('en-SG')}`;
   };
 
@@ -104,22 +77,27 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
           {/* Main Price Headline */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950/20 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <span className="text-xs text-slate-400 block mb-1">Transacted Sale Price</span>
+              <span className="text-xs text-slate-400 block mb-1">Transacted Price (SGD)</span>
               <div className="text-2xl sm:text-3xl font-extrabold text-rose-300 font-mono">
                 S$ {property.priceSgd.toLocaleString('en-SG')}
               </div>
+              {property.nettPrice && (
+                <span className="text-xs text-emerald-400 mt-1 block font-mono">
+                  Developer Nett Price: S$ {property.nettPrice.toLocaleString('en-SG')}
+                </span>
+              )}
             </div>
 
             <div className="sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-800">
               <span className="text-xs text-slate-400 block mb-1">Unit Price ({unitMeasurement})</span>
               <div className="text-xl font-bold text-white font-mono">
-                {formatUnitPrice(property.unitPricePsf)}
+                {formatUnitPrice(property)}
                 <span className="text-xs text-slate-400 font-normal ml-1">/{unitMeasurement.toLowerCase()}</span>
               </div>
             </div>
           </div>
 
-          {/* Key Property Specs */}
+          {/* Official URA Key Property Specs */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
               <span className="text-slate-400 block text-[11px] mb-1">Property Type</span>
@@ -132,8 +110,8 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
             </div>
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
-              <span className="text-slate-400 block text-[11px] mb-1">Floor Level</span>
-              <span className="font-semibold text-slate-200 font-mono">{property.floorRange || 'N/A'}</span>
+              <span className="text-slate-400 block text-[11px] mb-1">Floor Range</span>
+              <span className="font-semibold text-slate-200 font-mono">{property.floorRange || '-'}</span>
             </div>
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
@@ -145,51 +123,86 @@ export const PropertyDetailModal: React.FC<PropertyDetailModalProps> = ({
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
               <span className="text-slate-400 block text-[11px] mb-1">Contract Date</span>
-              <span className="font-semibold text-slate-200 font-mono">{property.contractDate}</span>
+              <span className="font-semibold text-slate-200 font-mono">{property.contractDateDisplay}</span>
             </div>
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
-              <span className="text-slate-400 block text-[11px] mb-1">Completion (TOP)</span>
+              <span className="text-slate-400 block text-[11px] mb-1">Units Transacted</span>
               <span className="font-semibold text-slate-200 font-mono">
-                {property.completionYear || 'Uncompleted'}
+                {property.noOfUnits} unit{property.noOfUnits > 1 ? 's' : ''}
               </span>
             </div>
           </div>
 
-          {/* Singapore Stamp Duty Calculation */}
-          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 space-y-2">
+          {/* Singapore Buyer's Stamp Duty (BSD) Calculation */}
+          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5 font-bold text-slate-200">
                 <Calculator className="w-4 h-4 text-emerald-400" />
-                <span>Estimated Singapore Buyer's Stamp Duty (BSD)</span>
+                <span>Statutory Buyer's Stamp Duty (BSD)</span>
               </div>
-              <span className="font-mono font-bold text-emerald-300">
-                S$ {estimatedBsd.toLocaleString('en-SG')}
+              <span className="font-mono font-bold text-emerald-300 text-sm">
+                S$ {bsdResult.totalBsd.toLocaleString('en-SG')}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Calculated using statutory IRAS residential stamp duty tiers up to 6% for properties transacted in Singapore. Additional Buyer's Stamp Duty (ABSD) may apply based on residential status and property count.
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
+              {bsdResult.breakdown.map((b, idx) => (
+                <div key={idx} className="bg-slate-950/60 p-2 rounded border border-slate-800/60">
+                  <div className="text-slate-400 text-[10px]">{b.tier}</div>
+                  <div className="font-mono text-slate-200 font-medium mt-0.5">
+                    {b.rate} &rarr; S$ {b.amount.toLocaleString('en-SG')}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              Calculated using statutory IRAS residential tiers (up to 6% for amounts above S$3,000,000). Additional Buyer's Stamp Duty (ABSD) may also apply depending on citizenship and property count.
             </p>
           </div>
 
-          {/* API Trace Box */}
-          <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs font-mono text-slate-400">
-            <div className="flex items-center gap-2">
-              <Terminal className="w-3.5 h-3.5 text-rose-400" />
-              <span>Record ID: {property.id}</span>
+          {/* Raw Endpoint Schema Representation */}
+          <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-3.5 space-y-2 text-xs">
+            <div className="flex items-center justify-between text-slate-400">
+              <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                <FileText className="w-3.5 h-3.5 text-rose-400" />
+                <span>URA PMI_Resi_Transaction Record</span>
+              </div>
+              <span className="text-[10px] font-mono text-slate-400">service=PMI_Resi_Transaction</span>
             </div>
-            <button
-              onClick={onOpenApiModal}
-              className="text-rose-400 hover:underline flex items-center gap-1 text-[11px]"
-            >
-              <span>Endpoint Specs</span>
-              <ExternalLink className="w-3 h-3" />
-            </button>
+            <pre className="p-2.5 bg-slate-900/90 rounded-lg text-[11px] font-mono text-slate-300 overflow-x-auto">
+{JSON.stringify({
+  project: property.projectName,
+  street: property.street,
+  marketSegment: property.region,
+  transaction: {
+    area: String(property.areaSqm),
+    floorRange: property.floorRange,
+    noOfUnits: String(property.noOfUnits),
+    contractDate: property.contractDate.replace('-', '').slice(2, 4) + property.contractDate.replace('-', '').slice(4, 6) || '0125',
+    typeOfSale: property.typeOfSale === 'New Sale' ? '1' : property.typeOfSale === 'Sub Sale' ? '2' : '3',
+    price: String(property.priceSgd),
+    propertyType: property.propertyType,
+    district: property.district.replace('D', ''),
+    tenure: property.tenure,
+    ...(property.nettPrice ? { nettPrice: String(property.nettPrice) } : {})
+  }
+}, null, 2)}
+            </pre>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/60 flex items-center justify-end">
+        <div className="p-4 border-t border-slate-800 bg-slate-900/60 flex items-center justify-between">
+          <button
+            onClick={onOpenApiModal}
+            className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 font-mono transition-colors"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Endpoint Specifications</span>
+          </button>
+
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition-colors"

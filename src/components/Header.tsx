@@ -2,20 +2,15 @@ import React from 'react';
 import { 
   Building2, 
   Terminal, 
-  Settings2, 
-  Server, 
-  CheckCircle2, 
-  AlertCircle, 
   RefreshCw,
-  SlidersHorizontal,
   MapPin,
   LineChart,
-  Table
+  Table,
+  Radio
 } from 'lucide-react';
-import { ApiConfig } from '../types/property';
 
 interface HeaderProps {
-  apiConfig: ApiConfig;
+  isLive: boolean;
   activeTab: 'transactions' | 'districts' | 'analytics' | 'api-hub';
   setActiveTab: (tab: 'transactions' | 'districts' | 'analytics' | 'api-hub') => void;
   onOpenApiModal: () => void;
@@ -26,7 +21,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  apiConfig,
+  isLive,
   activeTab,
   setActiveTab,
   onOpenApiModal,
@@ -51,14 +46,14 @@ export const Header: React.FC<HeaderProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-1.5">
-                  Singapore Private Property
-                  <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700/60 hidden sm:inline-block">
-                    PRICES
-                  </span>
+                  Singapore Private Property Prices
                 </h1>
+                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hidden sm:inline-block">
+                  URA LIVE
+                </span>
               </div>
               <p className="text-xs text-slate-400 hidden md:block">
-                Residential Transaction Benchmark &bull; CCR / RCR / OCR Price Tracking
+                Official URA Private Residential Property Transactions &bull; PMI_Resi_Transaction
               </p>
             </div>
           </div>
@@ -69,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setActiveTab('transactions')}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeTab === 'transactions'
-                  ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/25'
+                  ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
@@ -81,7 +76,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setActiveTab('districts')}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeTab === 'districts'
-                  ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/25'
+                  ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
@@ -93,25 +88,24 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setActiveTab('analytics')}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeTab === 'analytics'
-                  ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/25'
+                  ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <LineChart className="w-3.5 h-3.5" />
-              <span>Market Analytics</span>
+              <span>Market Trends</span>
             </button>
 
             <button
               onClick={() => setActiveTab('api-hub')}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 activeTab === 'api-hub'
-                  ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/25'
+                  ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <Terminal className="w-3.5 h-3.5" />
-              <span>API Integration</span>
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span>Endpoint Specs</span>
             </button>
           </nav>
 
@@ -122,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setUnitMeasurement('PSF')}
-                className={`px-2 py-1 rounded transition-colors ${
+                className={`px-2.5 py-1 rounded transition-colors ${
                   unitMeasurement === 'PSF'
                     ? 'bg-slate-800 text-rose-300 font-semibold shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
@@ -134,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setUnitMeasurement('PSM')}
-                className={`px-2 py-1 rounded transition-colors ${
+                className={`px-2.5 py-1 rounded transition-colors ${
                   unitMeasurement === 'PSM'
                     ? 'bg-slate-800 text-rose-300 font-semibold shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
@@ -150,86 +144,55 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onRefreshData}
               disabled={isLoading}
               className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors disabled:opacity-50"
-              title="Refresh API Data"
+              title="Reload URA Endpoint Dataset"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-rose-400' : ''}`} />
             </button>
 
-            {/* Connection Status & Config Launcher */}
+            {/* Endpoint Specs Launcher */}
             <button
               onClick={onOpenApiModal}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                apiConfig.connected
-                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/40'
-                  : 'bg-amber-950/30 border-amber-500/40 text-amber-300 hover:bg-amber-900/30'
-              }`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700 hover:bg-slate-800 transition-colors"
             >
-              {apiConfig.connected ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="hidden sm:inline">Backend Connected</span>
-                  <span className="sm:hidden">API OK</span>
-                </>
-              ) : (
-                <>
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                  </span>
-                  <span className="hidden sm:inline">API: Placeholder Active</span>
-                  <span className="sm:hidden">API Ready</span>
-                </>
-              )}
-              <Settings2 className="w-3.5 h-3.5 ml-0.5 opacity-70" />
+              <Radio className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">URA Service</span>
             </button>
           </div>
         </div>
 
-        {/* Mobile Sub-Navigation Bar */}
-        <div className="flex lg:hidden overflow-x-auto py-2.5 gap-2 border-t border-slate-800/80 no-scrollbar">
+        {/* Mobile Navigation Row */}
+        <div className="flex lg:hidden overflow-x-auto py-2 gap-1 border-t border-slate-800/60 no-scrollbar text-xs">
           <button
             onClick={() => setActiveTab('transactions')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap ${
-              activeTab === 'transactions'
-                ? 'bg-rose-500 text-white'
-                : 'text-slate-400 hover:bg-slate-900'
+            className={`px-3 py-1 rounded-lg shrink-0 ${
+              activeTab === 'transactions' ? 'bg-rose-600 text-white font-medium' : 'text-slate-400'
             }`}
           >
-            <Table className="w-3.5 h-3.5" />
             Transactions
           </button>
           <button
             onClick={() => setActiveTab('districts')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap ${
-              activeTab === 'districts'
-                ? 'bg-rose-500 text-white'
-                : 'text-slate-400 hover:bg-slate-900'
+            className={`px-3 py-1 rounded-lg shrink-0 ${
+              activeTab === 'districts' ? 'bg-rose-600 text-white font-medium' : 'text-slate-400'
             }`}
           >
-            <MapPin className="w-3.5 h-3.5" />
-            Districts (D01-D28)
+            Districts
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap ${
-              activeTab === 'analytics'
-                ? 'bg-rose-500 text-white'
-                : 'text-slate-400 hover:bg-slate-900'
+            className={`px-3 py-1 rounded-lg shrink-0 ${
+              activeTab === 'analytics' ? 'bg-rose-600 text-white font-medium' : 'text-slate-400'
             }`}
           >
-            <LineChart className="w-3.5 h-3.5" />
-            Analytics
+            Trends
           </button>
           <button
             onClick={() => setActiveTab('api-hub')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap ${
-              activeTab === 'api-hub'
-                ? 'bg-rose-500 text-white'
-                : 'text-slate-400 hover:bg-slate-900'
+            className={`px-3 py-1 rounded-lg shrink-0 ${
+              activeTab === 'api-hub' ? 'bg-rose-600 text-white font-medium' : 'text-slate-400'
             }`}
           >
-            <Terminal className="w-3.5 h-3.5" />
-            API Hub
+            Endpoint Specs
           </button>
         </div>
       </div>
