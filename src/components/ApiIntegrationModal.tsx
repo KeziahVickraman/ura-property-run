@@ -51,7 +51,7 @@ export const ApiIntegrationModal: React.FC<ApiIntegrationModalProps> = ({
     payload?: unknown;
   } | null>(null);
 
-  const [activeEndpointTab, setActiveEndpointTab] = useState<'transactions' | 'stats' | 'districts' | 'trends' | 'health'>('transactions');
+  const [activeEndpointTab, setActiveEndpointTab] = useState<'transactions' | 'stats' | 'districts' | 'trends' | 'health' | 'ura'>('ura');
   const [copiedCurl, setCopiedCurl] = useState(false);
 
   if (!isOpen) return null;
@@ -239,6 +239,48 @@ export const ApiIntegrationModal: React.FC<ApiIntegrationModalProps> = ({
   "status": "healthy",
   "service": "singapore-property-api",
   "version": "1.0.0"
+}`,
+    },
+    {
+      id: 'ura',
+      label: 'URA Datasets (Serverless)',
+      method: 'GET',
+      path: '/api/transactions',
+      fullPath: '/api/transactions?batch=1',
+      desc: 'Serverless integration in /api. Step 1: trades AccessKey for today\'s daily Token. Step 2: invokes URA PMI_Resi_Transaction sending both AccessKey and Token headers.',
+      params: [
+        { name: 'batch', type: 'number (1-4)', desc: 'URA data batch index (default: 1)' },
+        { name: 'service', type: 'string', desc: 'URA dataset name (default: PMI_Resi_Transaction)' },
+      ],
+      curl: `# 1. Trade AccessKey for today's token (handled automatically by /api/token)
+curl -X GET "http://localhost:3000/api/token" \\
+  -H "AccessKey: $URA_ACCESS_KEY"
+
+# 2. Invoke URA dataset (sends AccessKey & Token behind the scenes)
+curl -X GET "http://localhost:3000/api/transactions?batch=1" \\
+  -H "AccessKey: $URA_ACCESS_KEY"`,
+      sampleResponse: `{
+  "Status": "Success",
+  "Result": [
+    {
+      "street": "CAIRNHILL ROAD",
+      "project": "THE RITZ-CARLTON RESIDENCES SINGAPORE CAIRNHILL",
+      "marketSegment": "CCR",
+      "transaction": [
+        {
+          "area": "263",
+          "floorRange": "31-35",
+          "noOfUnits": "1",
+          "contractDate": "0125",
+          "typeOfSale": "1",
+          "price": "10380000",
+          "propertyType": "Condominium",
+          "district": "09",
+          "tenure": "Freehold"
+        }
+      ]
+    }
+  ]
 }`,
     },
   ];

@@ -410,6 +410,46 @@ export class PropertyApiService {
             { period: '2024-Q4', overallPsf: 2380, ccrPsf: 3120, rcrPsf: 2450, ocrPsf: 1780, volume: 860 },
           ],
         },
+        {
+          method: 'GET',
+          path: '/api/token',
+          description: 'Step 1: Trade AccessKey for today\'s daily URA Token (https://eservice.ura.gov.sg/uraDataService/insertNewToken/v1)',
+          headers: ['AccessKey'],
+          responseExample: {
+            status: 'Success',
+            token: 'eyJhbGciOi...',
+            dateKey: '2025-02-15',
+            cached: false,
+          },
+        },
+        {
+          method: 'GET',
+          path: '/api/transactions',
+          description: 'Step 2: Invoke URA PMI_Resi_Transaction sending BOTH AccessKey and Token headers',
+          queryParams: ['service', 'batch'],
+          headers: ['AccessKey'],
+          responseExample: {
+            Status: 'Success',
+            Result: [
+              {
+                street: 'CAIRNHILL ROAD',
+                project: 'THE RITZ-CARLTON RESIDENCES',
+                marketSegment: 'CCR',
+                transaction: [
+                  {
+                    area: '263',
+                    floorRange: '31-35',
+                    contractDate: '0125',
+                    price: '10380000',
+                    propertyType: 'Condominium',
+                    district: '09',
+                    tenure: 'Freehold',
+                  }
+                ]
+              }
+            ],
+          },
+        },
       ],
     };
   }
