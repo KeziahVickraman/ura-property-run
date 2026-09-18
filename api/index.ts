@@ -20,32 +20,27 @@ export default async function handler(req: any, res: any) {
     return tokenHandler(req, res);
   }
 
-  if (pathname === '/api/transactions' || action === 'transactions' || (!action && pathname === '/api')) {
-    // If request to root /api has no action or explicitly transactions, handle transactions
-    if (action === 'health') {
-      const hasKey = !!resolveAccessKey(req.headers);
-      const healthData = {
-        status: 'ok',
-        service: 'URA Serverless Connection',
-        environmentKeyConfigured: hasKey,
-        todaySingaporeDate: getTodaySingaporeDate(),
-        endpoints: {
-          token: '/api/token',
-          transactions: '/api/transactions?batch=1',
-          uraRoot: '/api',
-        },
-        upstreamUraEndpoints: {
-          tokenTrader: 'https://eservice.ura.gov.sg/uraDataService/insertNewToken/v1',
-          dataService: 'https://eservice.ura.gov.sg/uraDataService/invokeUraDS/v1?service=PMI_Resi_Transaction&batch=1',
-        },
-      };
-      res.statusCode = 200;
-      if (res.json) return res.json(healthData);
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify(healthData));
-    }
-
-    return transactionsHandler(req, res);
+  if (action === 'health' || pathname === '/api/health') {
+    const hasKey = !!resolveAccessKey(req.headers);
+    const healthData = {
+      status: 'ok',
+      service: 'URA Serverless Connection',
+      environmentKeyConfigured: hasKey,
+      todaySingaporeDate: getTodaySingaporeDate(),
+      endpoints: {
+        token: '/api/token',
+        transactions: '/api/transactions?batch=1',
+        uraRoot: '/api',
+      },
+      upstreamUraEndpoints: {
+        tokenTrader: 'https://eservice.ura.gov.sg/uraDataService/insertNewToken/v1',
+        dataService: 'https://eservice.ura.gov.sg/uraDataService/invokeUraDS/v1?service=PMI_Resi_Transaction&batch=1',
+      },
+    };
+    res.statusCode = 200;
+    if (res.json) return res.json(healthData);
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify(healthData));
   }
 
   return transactionsHandler(req, res);

@@ -13,30 +13,16 @@ function serverlessApiPlugin() {
         const url = new URL(req.url, 'http://localhost');
         const pathname = url.pathname.replace(/\/$/, '');
 
-        if (pathname === '/api/token') {
+        if (pathname.startsWith('/api')) {
           try {
-            const { default: handler } = await import('./api/token');
-            return handler(req, res);
-          } catch (err: any) {
-            res.statusCode = 500;
-            res.setHeader('Content-Type', 'application/json');
-            return res.end(JSON.stringify({ success: false, error: err.message || 'API error' }));
-          }
-        }
-
-        if (pathname === '/api/transactions') {
-          try {
-            const { default: handler } = await import('./api/transactions');
-            return handler(req, res);
-          } catch (err: any) {
-            res.statusCode = 500;
-            res.setHeader('Content-Type', 'application/json');
-            return res.end(JSON.stringify({ success: false, error: err.message || 'API error' }));
-          }
-        }
-
-        if (pathname === '/api/ura' || pathname === '/api') {
-          try {
+            if (pathname === '/api/token') {
+              const { default: handler } = await import('./api/token');
+              return handler(req, res);
+            }
+            if (pathname === '/api/transactions') {
+              const { default: handler } = await import('./api/transactions');
+              return handler(req, res);
+            }
             const { default: handler } = await import('./api/index');
             return handler(req, res);
           } catch (err: any) {
